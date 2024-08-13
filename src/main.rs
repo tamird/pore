@@ -117,6 +117,12 @@ enum Commands {
     local: bool,
   },
 
+  /// Checkout a branch for development
+  Checkout {
+    /// Specify a branch to checkout
+    branch: String,
+  },
+
   /// Checkout a new tree into a new directory
   Clone {
     /// The target to checkout in the format <REMOTE>[/<BRANCH>[:MANIFEST]]
@@ -385,6 +391,7 @@ impl std::fmt::Display for Commands {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Commands::Init { .. } => write!(f, "init"),
+      Commands::Checkout { .. } => write!(f, "checkout"),
       Commands::Clone { .. } => write!(f, "clone"),
       Commands::Fetch { .. } => write!(f, "fetch"),
       Commands::Sync { .. } => write!(f, "sync"),
@@ -438,6 +445,10 @@ fn parse_group_filters(group_filters: &str) -> Vec<GroupFilter> {
     .collect();
 
   group_filters
+}
+
+fn cmd_checkout(config: Arc<Config>, pool: &mut Pool, tree: &Tree, target_branch: &str) -> Result<i32, Error> {
+  tree.checkout(config, pool, target_branch)
 }
 
 fn cmd_clone(
@@ -959,6 +970,9 @@ fn main() {
           group_filters.as_deref(),
           fetch,
         )
+      }
+      Commands::Checkout { branch } => {
+        cmd_checkout(config.clone(), &mut pool, &Tree::find_from_path(cwd)?, &branch)
       }
       Commands::Clone {
         target,
