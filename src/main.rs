@@ -124,6 +124,12 @@ enum Commands {
     local: bool,
   },
 
+  /// Checkout a branch for development
+  Checkout {
+    /// Specify a branch to checkout
+    branch: String,
+  },
+
   /// Checkout a new tree into a new directory
   Clone {
     /// The target to checkout in the format <REMOTE>[/<BRANCH>[:MANIFEST]]
@@ -392,6 +398,7 @@ impl std::fmt::Display for Commands {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Commands::Init { .. } => write!(f, "init"),
+      Commands::Checkout { .. } => write!(f, "checkout"),
       Commands::Clone { .. } => write!(f, "clone"),
       Commands::Fetch { .. } => write!(f, "fetch"),
       Commands::Sync { .. } => write!(f, "sync"),
@@ -445,6 +452,10 @@ fn parse_group_filters(group_filters: &str) -> Vec<GroupFilter> {
     .collect();
 
   group_filters
+}
+
+fn cmd_checkout(config: &Config, pool: &mut Pool, tree: &Tree, target_branch: &str) -> Result<i32, Error> {
+  tree.checkout(config, pool, target_branch)
 }
 
 fn cmd_clone(
@@ -660,7 +671,7 @@ fn cmd_import(config: &Config, pool: &mut Pool, target_path: Option<PathBuf>, co
 
   let mut job = Job::with_name("import");
   for (remote, projects) in &remote_projects {
-    let remote_config = config.find_remote(&remote)?;
+    let remote_config = config.find_remote(remote)?;
     let depot = config.find_depot(&remote_config.depot)?;
     std::fs::create_dir_all(&depot.path).context("failed to create depot directory")?;
     let depot_metadata = std::fs::metadata(&depot.path)?;
@@ -976,6 +987,7 @@ fn main() {
           fetch,
         )
       }
+      Commands::Checkout { branch } => cmd_checkout(&config, &mut pool, &Tree::find_from_path(cwd)?, &branch),
       Commands::Clone {
         target,
         directory,
