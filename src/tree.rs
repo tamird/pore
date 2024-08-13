@@ -1066,6 +1066,76 @@ impl Tree {
     Ok(())
   }
 
+  pub fn checkout(&self, config: Arc<Config>, pool: &mut Pool, target_branch: &str) -> Result<i32, Error> {
+    let projects = self.collect_manifest_projects(Arc::clone(&config), &self.read_manifest()?, None, None)?;
+
+    let mut job = Job::with_name("checkout");
+    let tree_root = Arc::new(self.path.clone());
+
+    for project in projects {
+      let config = Arc::clone(&config);
+      let tree_root = Arc::clone(&tree_root);
+      let target_branch = target_branch.to_owned();
+
+      job.add_task(
+        project.project_path.clone(),
+        move |_| -> Result<Option<String>, Error> {
+          let repo = git2::Repository::open(&tree_root.join(&project.project_path))
+            .context(format!("failed to open object repository {:?}", project.project_path))?;
+
+          let maybe_parse = match repo.revparse_ext(&target_branch) {
+            Ok(result) => Ok(Some(result)),
+            Err(error) => {
+              if error.code() == git2::ErrorCode::NotFound {
+                Ok(None)
+              } else {
+                Err(error)
+              }
+            }
+          }?;
+
+          if let Some((object, reference)) = maybe_parse {
+            repo.checkout_tree(&object, None)?;
+
+            match reference {
+              Some(repo_ref) => repo.set_head(repo_ref.name().unwrap())?,
+              None => repo.set_head_detached(object.id())?,
+            }
+
+            Ok(Some(project.project_path))
+          } else {
+            Ok(None)
+          }
+        },
+      );
+    }
+
+    let results = pool.execute(job);
+
+    if !results.failed.is_empty() {
+      for error in results.failed {
+        eprintln!("{}: {}", error.name, error.result);
+      }
+      return Ok(1);
+    }
+
+    let mut checkout_projects = results
+      .successful
+      .into_iter()
+      .filter_map(|result| result.result)
+      .peekable();
+
+    if checkout_projects.peek().is_none() {
+      eprintln!("error: no project has branch {target_branch}");
+      Ok(1)
+    } else {
+      for checkout_project in checkout_projects {
+        println!("Checked out {checkout_project}");
+      }
+      Ok(0)
+    }
+  }
+
   pub fn sync(
     &mut self,
     config: Arc<Config>,
