@@ -146,6 +146,12 @@ enum Commands {
     local: bool,
   },
 
+  /// Checkout a branch for development
+  Checkout {
+    /// Specify a branch to fetch (can be used multiple times)
+    branch: String,
+  },
+
   /// Fetch a tree's repositories without checking out
   Fetch {
     /// Fetch all remote refs (opposite of `repo sync -c`, which is the default behavior)
@@ -392,6 +398,7 @@ impl std::fmt::Display for Commands {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Commands::Init { .. } => write!(f, "init"),
+      Commands::Checkout { .. } => write!(f, "checkout"),
       Commands::Clone { .. } => write!(f, "clone"),
       Commands::Fetch { .. } => write!(f, "fetch"),
       Commands::Sync { .. } => write!(f, "sync"),
@@ -445,6 +452,10 @@ fn parse_group_filters(group_filters: &str) -> Vec<GroupFilter> {
     .collect();
 
   group_filters
+}
+
+fn cmd_checkout(config: Config, pool: &mut Pool, tree: &Tree, target_branch: &str) -> Result<i32, Error> {
+  tree.checkout(config, pool, target_branch)
 }
 
 fn cmd_clone(
@@ -975,6 +986,10 @@ fn main() {
           group_filters.as_deref(),
           fetch,
         )
+      }
+      Commands::Checkout { branch } => {
+        let tree = Tree::find_from_path(cwd)?;
+        cmd_checkout(config, &mut pool, &tree, &branch)
       }
       Commands::Clone {
         target,
