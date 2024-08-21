@@ -124,6 +124,9 @@ enum Commands {
     local: bool,
   },
 
+  /// List the topic branches
+  Branches {},
+
   /// Checkout a new tree into a new directory
   Clone {
     /// The target to checkout in the format <REMOTE>[/<BRANCH>[:MANIFEST]]
@@ -392,6 +395,7 @@ impl std::fmt::Display for Commands {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Commands::Init { .. } => write!(f, "init"),
+      Commands::Branches { .. } => write!(f, "branches"),
       Commands::Clone { .. } => write!(f, "clone"),
       Commands::Fetch { .. } => write!(f, "fetch"),
       Commands::Sync { .. } => write!(f, "sync"),
@@ -445,6 +449,47 @@ fn parse_group_filters(group_filters: &str) -> Vec<GroupFilter> {
     .collect();
 
   group_filters
+}
+
+fn cmd_branches(config: Config, pool: &mut Pool, tree: &Tree) -> Result<i32, Error> {
+  let results = tree.branches(config, pool)?;
+
+  if results.failed.is_empty() {
+    let projects_with_topic_branch = results.successful.into_iter().filter_map(|execution_result| {
+      if execution_result.result.branches.is_empty() {
+        Some(execution_result.result)
+      } else {
+        None
+      }
+    });
+
+    for project in projects_with_topic_branch {
+      println!(
+        "{}: {}",
+        project.name,
+        project
+          .branches
+          .iter()
+          .map(|branch| {
+            if branch.is_head {
+              format!("*{}", branch.name)
+            } else {
+              branch.name.clone()
+            }
+          })
+          .collect::<Vec<_>>()
+          .join(", ")
+      );
+    }
+
+    Ok(0)
+  } else {
+    for error in results.failed {
+      eprintln!("{}: {}", error.name, error.result);
+    }
+
+    Ok(1)
+  }
 }
 
 fn cmd_clone(
@@ -975,6 +1020,10 @@ fn main() {
           group_filters.as_deref(),
           fetch,
         )
+      }
+      Commands::Branches {} => {
+        let tree = Tree::find_from_path(cwd)?;
+        cmd_branches(config, &mut pool, &tree)
       }
       Commands::Clone {
         target,
