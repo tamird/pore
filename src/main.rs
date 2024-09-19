@@ -464,7 +464,7 @@ fn cmd_branches(config: Config, pool: &mut Pool, tree: &Tree) -> Result<i32, Err
 
   if results.failed.is_empty() {
     let projects_with_topic_branch = results.successful.into_iter().filter_map(|execution_result| {
-      if execution_result.result.branches.is_empty() {
+      if !execution_result.result.branches.is_empty() {
         Some(execution_result.result)
       } else {
         None
