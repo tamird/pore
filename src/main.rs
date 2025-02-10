@@ -424,24 +424,23 @@ impl std::fmt::Display for Commands {
   }
 }
 
-fn parse_target(target: &str) -> Result<(String, Option<String>, Option<String>), Error> {
-  let vec: Vec<&str> = target.split('/').collect();
-  if vec.len() > 2 {
-    bail!("invalid target '{}'", target)
-  }
-  let remote = vec[0].into();
+fn parse_target(target: &str) -> Result<(&str, Option<&str>, Option<&str>), Error> {
+  let mut it = target.split('/');
+  let remote = it.next().unwrap();
 
-  if let Some(branch_file) = vec.get(1) {
-    let v: Vec<&str> = branch_file.split(':').collect();
-    if v.len() > 2 {
-      bail!("invalid target '{}'", target)
+  match it.next() {
+    None => Ok((remote, None, None)),
+    Some(branch_file) => {
+      let unexpected = it.collect::<Vec<_>>();
+      ensure!(unexpected.is_empty(), "unexpected suffix: {}", unexpected.join("/"));
+      let mut it = branch_file.split(':');
+      let branch = it.next().unwrap();
+      let file = it.next();
+      let unexpected = it.collect::<Vec<_>>();
+      ensure!(unexpected.is_empty(), "unexpected suffix: {}", unexpected.join(":"));
+      Ok((remote, Some(branch), file))
     }
-    let branch = Some(v[0].into());
-    let file = v.get(1).map(|&s| s.into());
-    return Ok((remote, branch, file));
   }
-
-  Ok((remote, None, None))
 }
 
 fn parse_group_filters(group_filters: &str) -> Vec<GroupFilter> {
@@ -508,11 +507,11 @@ fn cmd_clone(
   fetch: bool,
 ) -> Result<i32, Error> {
   let (manifest, branch, file) = parse_target(target)?;
-  let manifest_config = config.find_manifest(&manifest)?;
+  let manifest_config = config.find_manifest(manifest)?;
   let remote_config = config.find_remote(&manifest_config.remote)?;
   let depot = config.find_depot(&remote_config.depot)?;
-  let branch = branch.as_ref().unwrap_or(&manifest_config.default_branch);
-  let file = file.as_ref().unwrap_or(&manifest_config.default_manifest_file);
+  let branch = branch.unwrap_or(manifest_config.default_branch.as_str());
+  let file = file.unwrap_or(manifest_config.default_manifest_file.as_str());
 
   let tree_root = directory.unwrap_or(PathBuf::from(&branch));
   if let Err(err) = std::fs::create_dir_all(&tree_root) {
